@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+.env.*.local
+*.log
+npm-debug.log*
+yarn-error.log*
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+coverage/
+repomix-output.xml
