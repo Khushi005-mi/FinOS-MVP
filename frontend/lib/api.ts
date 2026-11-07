@@ -1,32 +1,56 @@
-import axios from 'axios';
+import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosError } from 'axios';
 
-export const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1',
-  timeout: 10000, // 10-second hard timeout: NEVER hangs for 5 minutes
+// Explicitly use localhost to prevent 127.0.0.1 cross-origin CORS mismatches
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+export const api: AxiosInstance = axios.create({
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
 api.interceptors.request.use(
-  (config) => {
+  (config: InternalAxiosRequestConfig) => {
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('finos_access_token');
-      if (token) {
+      if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
       }
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error: AxiosError) => Promise.reject(error)
 );
 
-export const handleApiError = (err: unknown): string => {
-  if (axios.isAxiosError(err)) {
-    if (err.code === 'ECONNABORTED') {
-      return 'Request timed out after 10 seconds. Check if backend server is responsive.';
+api.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError) => {
+    if (error.response && error.response.status === 401) {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('finos_access_token');
+        window.location.href = '/login';
+      }
     }
-    return err.response?.data?.detail || err.message || 'An unexpected API error occurred.';
+    return Promise.reject(error);
   }
-  return (err as any)?.message || String(err);
-};
+);
+
+export function handleApiError(err: any): string {
+  try {
+    if (!err) return 'An unknown error occurred.';
+    if (typeof err === 'string') return err;
+    const data = err.response?.data || err.data || err;
+    if (typeof data === 'string') return data;
+    if (data?.detail) {
+      if (typeof data.detail === 'string') return data.detail;
+      if (Array.isArray(data.detail)) {
+        return data.detail.map((item: any) => (typeof item === 'string' ? item : item?.msg || JSON.stringify(item))).join(' | ');
+      }
+      return JSON.stringify(data.detail);
+    }
+    return data?.message || err.message || JSON.stringify(data);
+  } catch {
+    return 'An error occurred while processing response.';
+  }
+}

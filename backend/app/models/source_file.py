@@ -1,24 +1,34 @@
-from sqlalchemy import Column, String, Text, Integer, Date, DateTime, ForeignKey, CHAR
+from sqlalchemy import Column, String, BigInteger, Integer, Boolean, TIMESTAMP
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
-import uuid
+from sqlalchemy.sql import func
 from app.db.base import Base
+import uuid
 
-class SourceFileModel(Base):
+class SourceFile(Base):
     __tablename__ = "source_files"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
-    file_type = Column(String(50), nullable=False)        # e.g., HDFC_BANK, RAZORPAY_GATEWAY, TALLY_LEDGER
-    file_path = Column(Text, nullable=False)              # Local vault path or S3 URI
-    sha256_hash = Column(CHAR(64), nullable=False, index=True) # Tamper-evident cryptographic seal
-    uploaded_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    uploaded_at = Column(DateTime(timezone=True), server_default="now()", nullable=False)
-    row_count = Column(Integer, nullable=True)
-    period_start = Column(Date, nullable=True)
-    period_end = Column(Date, nullable=True)
+    organization_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    filename = Column(String(255), nullable=False)
+    file_type = Column(String(50), nullable=True)
+    source_type = Column(String(50), nullable=True)
+    file_hash = Column(String(64), nullable=True)
+    sha256_hash = Column(String(64), nullable=True)
+    file_size = Column(BigInteger, default=0)
+    records_count = Column(Integer, default=0)
+    row_count = Column(Integer, default=0)
+    storage_path = Column(String(512), nullable=True)
+    file_path = Column(String(512), nullable=True)
+    status = Column(String(50), server_default="VERIFIED")
+    is_historical = Column(Boolean, default=False, server_default="false", nullable=False)
+    uploaded_by = Column(UUID(as_uuid=True), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    uploaded_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
-    # Relationships to downstream normalized financial records
-    bank_transactions = relationship("BankTransactionModel", back_populates="source_file", cascade="all, delete-orphan")
-    settlements = relationship("SettlementModel", back_populates="source_file", cascade="all, delete-orphan")
-    ledger_entries = relationship("LedgerEntryModel", back_populates="source_file", cascade="all, delete-orphan")
+    # Compatibility properties for downstream engines
+    @property
+    def file_name(self):
+        return self.filename
+
+# Universal compatibility aliases
+SourceFileModel = SourceFile

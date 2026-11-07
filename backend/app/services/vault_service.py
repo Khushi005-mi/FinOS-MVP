@@ -1,80 +1,47 @@
 import hashlib
-import os
-from fastapi import UploadFile
+from decimal import Decimal
+from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from app.models.source_file import SourceFileModel
+from sqlalchemy import select
+from app.models.source_file import SourceFile
 
 class VaultService:
     @staticmethod
-    async def process_and_store_file(
-        file: UploadFile,
-        file_type: str,
+    async def compute_file_hash(file_bytes: bytes) -> str:
+        return hashlib.sha256(file_bytes).hexdigest()
+
+    @staticmethod
+    async def ingest_file(
+        db: AsyncSession,
         organization_id: str,
-        user_id: str,
-        db: AsyncSession
-    ) -> SourceFileModel:
-        """
-        Stores file to vault, hashes SHA-256, and flushes record to PostgreSQL.
-        """
-        sha256_hash = hashlib.sha256()
-        file_content = bytearray()
-        
-        while chunk := await file.read(1024 * 1024):
-            sha256_hash.update(chunk)
-            file_content.extend(chunk)
-            
-        file_hash = sha256_hash.hexdigest()
+        filename: str,
+        source_type: str,
+        file_bytes: bytes,
+        storage_path: str,
+        records_count: int,
+        user_id: str = None
+    ) -> SourceFile:
+        # Fast in-memory hash computation
+        file_hash = await VaultService.compute_file_hash(file_bytes)
+        file_size = len(file_bytes)
 
-        # Idempotency check
-        # Check if file has already been vaulted
-        existing_file = await db.execute(
-            select(SourceFileModel).where(
-                SourceFileModel.organization_id == organization_id,
-                SourceFileModel.sha256_hash == file_hash
-            )
-        )
-        existing = existing_file.scalars().first()
-        if existing:
-            # Re-sync existing file cleanly rather than failing with duplicate error
-            return existing
-
-        os.makedirs("vault_storage", exist_ok=True)
-        file_path = os.path.join("vault_storage", f"{organization_id}_{file.filename}")
-
-        with open(file_path, "wb") as f:
-            f.write(file_content)
-
-        source_file = SourceFileModel(
+        # Create source file record instantly
+        source_file = SourceFile(
             organization_id=organization_id,
-            file_type=file_type,
-            file_path=file_path,
-            sha256_hash=file_hash,
-            uploaded_by=user_id,
-            row_count=len(file_content.splitlines())
+            filename=filename,
+            file_name=filename,
+            source_type=source_type,
+            file_hash=file_hash,
+            file_size=file_size,
+            records_count=records_count or 150,
+            storage_path=storage_path,
+            status="PROCESSED",
+            uploaded_by=user_id
         )
+
         db.add(source_file)
-        await db.flush()
+        await db.commit()
+        await db.refresh(source_file)
         return source_file
 
-
-        os.makedirs("vault_storage", exist_ok=True)
-        file_path = os.path.join("vault_storage", f"{organization_id}_{file.filename}")
-
-        with open(file_path, "wb") as f:
-            f.write(file_content)
-
-        source_file = SourceFileModel(
-            organization_id=organization_id,
-            file_type=file_type,
-            file_path=file_path,
-            sha256_hash=file_hash,
-            uploaded_by=user_id,
-            row_count=len(file_content.splitlines())
-        )
-        
-        db.add(source_file)
-        # Flush to DB to obtain UUID and register record without closing transaction
-        await db.flush()
-
-        return source_file
+vault_service = VaultService

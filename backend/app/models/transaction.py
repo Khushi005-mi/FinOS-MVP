@@ -1,56 +1,72 @@
-from sqlalchemy import Column, String, Text, Date, DateTime, ForeignKey, Numeric
+from sqlalchemy import Column, String, Numeric, Date, ForeignKey, TIMESTAMP
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
-import uuid
+from sqlalchemy.sql import func
 from app.db.base import Base
+import uuid
 
-class BankTransactionModel(Base):
+class BankTransaction(Base):
     __tablename__ = "bank_transactions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
-    source_file_id = Column(UUID(as_uuid=True), ForeignKey("source_files.id", ondelete="CASCADE"), nullable=False, index=True)
-    date = Column(Date, nullable=False, index=True)
-    narration = Column(Text, nullable=True)
-    debit_paise = Column(Numeric(20, 0), nullable=False, default=0)
-    credit_paise = Column(Numeric(20, 0), nullable=False, default=0)
+    organization_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    source_file_id = Column(UUID(as_uuid=True), nullable=True)
+    date = Column(Date, nullable=False)
+    narration = Column(String(500), nullable=False)
+    reference = Column(String(100), nullable=True)
+    reference_number = Column(String(100), nullable=True)
+    debit_paise = Column(Numeric(20, 0), server_default="0", nullable=True)
+    credit_paise = Column(Numeric(20, 0), server_default="0", nullable=True)
+    amount_paise = Column(Numeric(20, 0), server_default="0", nullable=True)
     balance_paise = Column(Numeric(20, 0), nullable=True)
-    reference = Column(String(100), nullable=True, index=True)
-    created_at = Column(DateTime(timezone=True), server_default="now()", nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
-    source_file = relationship("SourceFileModel", back_populates="bank_transactions")
+    def __init__(self, **kwargs):
+        if "reference" in kwargs and "reference_number" not in kwargs:
+            kwargs["reference_number"] = kwargs["reference"]
+        elif "reference_number" in kwargs and "reference" not in kwargs:
+            kwargs["reference"] = kwargs["reference_number"]
+        if "amount_paise" not in kwargs:
+            credit = kwargs.get("credit_paise") or 0
+            debit = kwargs.get("debit_paise") or 0
+            kwargs["amount_paise"] = credit - debit
+        super().__init__(**kwargs)
 
-
-class SettlementModel(Base):
+class Settlement(Base):
     __tablename__ = "settlements"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
-    source_file_id = Column(UUID(as_uuid=True), ForeignKey("source_files.id", ondelete="CASCADE"), nullable=False, index=True)
-    settlement_id = Column(String(100), nullable=False, index=True)
+    organization_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    source_file_id = Column(UUID(as_uuid=True), nullable=True)
+    settlement_id = Column(String(100), nullable=True)
+    settlement_date = Column(Date, nullable=False)
+    utr = Column(String(100), nullable=True)
     gross_amount_paise = Column(Numeric(20, 0), nullable=False)
-    fee_paise = Column(Numeric(20, 0), nullable=False)
-    gst_on_fee_paise = Column(Numeric(20, 0), nullable=True, default=0)
-    refunds_paise = Column(Numeric(20, 0), nullable=True, default=0)
-    holds_paise = Column(Numeric(20, 0), nullable=True, default=0)
+    fee_paise = Column(Numeric(20, 0), server_default="0", nullable=False)
+    gst_on_fee_paise = Column(Numeric(20, 0), server_default="0", nullable=True)
+    refunds_paise = Column(Numeric(20, 0), server_default="0", nullable=True)
+    holds_paise = Column(Numeric(20, 0), server_default="0", nullable=True)
     net_amount_paise = Column(Numeric(20, 0), nullable=False)
-    settlement_date = Column(Date, nullable=False, index=True)
-    created_at = Column(DateTime(timezone=True), server_default="now()", nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
-    source_file = relationship("SourceFileModel", back_populates="settlements")
-
-
-class LedgerEntryModel(Base):
+class LedgerEntry(Base):
     __tablename__ = "ledger_entries"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
-    source_file_id = Column(UUID(as_uuid=True), ForeignKey("source_files.id", ondelete="CASCADE"), nullable=False, index=True)
-    voucher_date = Column(Date, nullable=False, index=True)
-    voucher_type = Column(String(50), nullable=True)
-    party_id = Column(UUID(as_uuid=True), nullable=True, index=True)
-    amount_paise = Column(Numeric(20, 0), nullable=False)
-    ledger_name = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default="now()", nullable=False)
+    organization_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    source_file_id = Column(UUID(as_uuid=True), nullable=True)
+    voucher_date = Column(Date, nullable=False)
+    voucher_number = Column(String(100), nullable=True)
+    voucher_type = Column(String(100), nullable=True)
+    ledger_name = Column(String(255), nullable=False)
+    debit_paise = Column(Numeric(20, 0), server_default="0", nullable=True)
+    credit_paise = Column(Numeric(20, 0), server_default="0", nullable=True)
+    amount_paise = Column(Numeric(20, 0), server_default="0", nullable=True)
+    narration = Column(String(500), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
-    source_file = relationship("SourceFileModel", back_populates="ledger_entries")
+# Universal compatibility aliases
+BankTransactionModel = BankTransaction
+Transaction = BankTransaction
+TransactionModel = BankTransaction
+SettlementModel = Settlement
+LedgerEntryModel = LedgerEntry

@@ -1,5 +1,7 @@
 from fastapi import APIRouter
 from app.api.v1 import (
+    payment_policy,
+    vendors_admin,
     auth,
     profiles,
     vault,
@@ -7,39 +9,35 @@ from app.api.v1 import (
     reconciliation,
     discrepancy,
     movement,
-    dashboard,
-    payables,
-    ask,
     reports,
-    admin,
-    admin_controls,
+    dashboard,
+    ask,
+    payables,
+    cash,
     connections,
+    admin,
+    admin_controls
 )
 
 api_router = APIRouter()
 
-# 1. Auth & Workspace
+# Authentication & Session Management
 api_router.include_router(auth.router)
-api_router.include_router(profiles.router)
 
-# 2. Vault & Ingestion
+# Tenant Profile & Vault
+api_router.include_router(profiles.router)
 api_router.include_router(vault.router)
 api_router.include_router(adapters.router)
-
-# 3. Deterministic Matching & Exceptions
 api_router.include_router(reconciliation.router)
 api_router.include_router(discrepancy.router)
 api_router.include_router(movement.router)
-
-# 4. Truth Dashboard & Decision Queue
-api_router.include_router(dashboard.router)
-api_router.include_router(payables.router)
-
-# 5. Guarded Assistant & Compliance Reports
-api_router.include_router(ask.router)
 api_router.include_router(reports.router)
-api_router.include_router(admin.router)
-
-# 6. Admin Governance & Connection Requests
-api_router.include_router(admin_controls.router)
+api_router.include_router(dashboard.router)
+api_router.include_router(ask.router)
+api_router.include_router(payables.router)
+api_router.include_router(vendors_admin.router, prefix="/vendors-admin", tags=["vendors-admin"])
+api_router.include_router(payment_policy.router, prefix="/payment-policy", tags=["payment-policy"])
+api_router.include_router(cash.router)
 api_router.include_router(connections.router)
+api_router.include_router(admin.router)
+api_router.include_router(admin_controls.router)

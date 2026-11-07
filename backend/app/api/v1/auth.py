@@ -1,22 +1,24 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Body
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from pydantic import BaseModel, EmailStr
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 
 from app.db.session import get_db
-from app.models.client import OrganizationModel, UserModel, UserRole
+from app.models.client import UserModel, OrganizationModel, UserRole
 from app.core.security import get_password_hash, verify_password, create_access_token
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+router = APIRouter(tags=["Authentication"])
 
 class SignupRequest(BaseModel):
-    company_name: str
     email: EmailStr
     password: str
-    gstin: str | None = None
-    pan: str | None = None
+    organization_name: str = Field(..., alias="company_name")
+    role: str = "finance_user"
+
+    class Config:
+        populate_by_name = True
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -24,69 +26,57 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
-    token_type: str = "bearer"
+    token_type: str
     role: str
-    email: str
+    email: Optional[str] = None
 
+# Support both /auth/signup and /signup (with and without trailing slashes)
+@router.post("/auth/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/auth/signup/", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/signup/", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def signup(payload: SignupRequest, db: AsyncSession = Depends(get_db)):
-    """
-    Registers a new tenant organization and its initial ADMIN user.
-    """
-    existing_user = await db.execute(select(UserModel).where(UserModel.email == payload.email))
-    if existing_user.scalars().first():
+    existing = await db.execute(select(UserModel).where(UserModel.email == payload.email))
+    if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    org = OrganizationModel(
-        name=payload.company_name,
-        gstin=payload.gstin,
-        pan=payload.pan
-    )
+    org = OrganizationModel(name=payload.organization_name)
     db.add(org)
-    await db.flush()  # Acquire org.id UUID
+    await db.commit()
+    await db.refresh(org)
 
+    hashed_pwd = get_password_hash(payload.password)
     user = UserModel(
         organization_id=org.id,
         email=payload.email,
-        hashed_password=get_password_hash(payload.password),
-        role=UserRole.ADMIN
+        password_hash=hashed_pwd,
+        hashed_password=hashed_pwd,
+        role=payload.role,
+        is_active=True
     )
     db.add(user)
     await db.commit()
+    await db.refresh(user)
 
-    access_token = create_access_token(data={
-        "sub": str(user.id),
-        "org_id": str(org.id),
-        "role": user.role
-    })
+    token = create_access_token({"sub": str(user.id), "org_id": str(org.id), "role": user.role})
+    return {"access_token": token, "token_type": "bearer", "role": user.role, "email": user.email}
 
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "role": user.role,
-        "email": user.email
-    }
-
+# Support both /auth/login and /login (with and without trailing slashes)
+@router.post("/auth/login", response_model=TokenResponse)
+@router.post("/auth/login/", response_model=TokenResponse)
 @router.post("/login", response_model=TokenResponse)
+@router.post("/login/", response_model=TokenResponse)
 async def login(
-    email: Optional[str] = Body(None),
-    password: Optional[str] = Body(None),
+    payload: Optional[LoginRequest] = None,
     form_data: Optional[OAuth2PasswordRequestForm] = Depends(lambda: None), 
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    DUAL-MODE LOGIN ENDPOINT:
-    Supports BOTH standard JSON bodies ({ "email": "...", "password": "..." }) 
-    AND Swagger OAuth2 Form data (username=..., password=...).
-    """
     login_email = None
     login_password = None
 
-    # Check if request came via JSON Body
-    if email and password:
-        login_email = email
-        login_password = password
-    # Check if request came via OAuth2 Form (Swagger Authorize button)
+    if payload and payload.email and payload.password:
+        login_email = payload.email
+        login_password = payload.password
     elif form_data and form_data.username and form_data.password:
         login_email = form_data.username
         login_password = form_data.password
@@ -94,31 +84,19 @@ async def login(
     if not login_email or not login_password:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Email/Username and password are required."
+            detail="Email and password are required."
         )
 
     result = await db.execute(select(UserModel).where(UserModel.email == login_email))
-    user = result.scalars().first()
+    user = result.scalar_one_or_none()
 
-    if not user or not verify_password(login_password, user.hashed_password):
+    stored_hash = getattr(user, "hashed_password", None) or getattr(user, "password_hash", None)
+    if not user or not stored_hash or not verify_password(login_password, stored_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if not user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user account")
-
-    access_token = create_access_token(data={
-        "sub": str(user.id),
-        "org_id": str(user.organization_id),
-        "role": user.role
-    })
-
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "role": user.role,
-        "email": user.email
-    }
+    token = create_access_token({"sub": str(user.id), "org_id": str(user.organization_id), "role": user.role})
+    return {"access_token": token, "token_type": "bearer", "role": user.role, "email": user.email}

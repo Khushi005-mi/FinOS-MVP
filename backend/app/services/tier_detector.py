@@ -1,6 +1,6 @@
 class DataTierDetectorService:
     @staticmethod
-    ancar_analyze_columns(columns: list[str]) -> dict:
+    def analyze_columns(columns: list[str]) -> dict:
         """
         CONCEPT: CAPABILITY-SPECIFIC READINESS (Feature F17)
         Inspects raw file headers to classify the dataset into Data Tiers (1, 2, or 3)
@@ -47,3 +47,6 @@ class DataTierDetectorService:
                 "module_locked": "Payables Priority Engine",
                 "guided_prompt": "Add due dates to your file upload to unlock the Payables Priority Engine."
             }
+
+    # Backward compatibility alias
+    can_analyze_columns = analyze_columns

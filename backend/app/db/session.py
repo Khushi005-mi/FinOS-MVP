@@ -1,37 +1,69 @@
-import contextlib
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+import os
+from contextlib import asynccontextmanager
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy import text
 from app.core.config import settings
+from app.db.base import Base
 
-# Initialize portable async engine
-engine = create_async_engine(settings.DATABASE_URL, echo=False, future=True)
+# 1. Initialize Engine
+engine = create_async_engine(
+    settings.DATABASE_URL,
+    echo=False,
+    future=True,
+    pool_pre_ping=True,
+    pool_size=10,
+    max_overflow=20
+)
 
-# Session factory
-async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+# 2. Universal Sessionmaker (exported under all common aliases)
+AsyncSessionLocal = async_sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autocommit=False,
+    autoflush=False
+)
+async_session_maker = AsyncSessionLocal
+SessionLocal = AsyncSessionLocal
 
-async def get_db():
-    """Standard FastAPI dependency for database sessions."""
-    async with async_session_maker() as session:
-        yield session
-
-@contextlib.asynccontextmanager
-async def get_tenant_db(organization_id: str):
-    """
-    FIXED MULTI-TENANT RLS SESSION:
-    Sets app.current_org_id for the database connection so RLS is enforced,
-    without wrapping in rigid session.begin() that crashes on inner commits.
-    """
-    async with async_session_maker() as session:
-        # Set tenant ID for the lifetime of this session
-        await session.execute(
-            text(f"SET app.current_org_id = '{organization_id}';")
-        )
+# 3. Dependencies
+async def get_db() -> AsyncSession:
+    """Standard async database session dependency."""
+    async with AsyncSessionLocal() as session:
         try:
             yield session
-            # If transaction is still open at the end, commit it cleanly
-            if session.is_active:
-                await session.commit()
+            await session.commit()
         except Exception:
-            if session.is_active:
-                await session.rollback()
+            await session.rollback()
             raise
+        finally:
+            await session.close()
+
+@asynccontextmanager
+async def get_tenant_db(organization_id: str = "00000000-0000-0000-0000-000000000001") -> AsyncSession:
+    """Async context manager supporting `async with get_tenant_db(...) as db:`."""
+    async with AsyncSessionLocal() as session:
+        try:
+            await session.execute(
+                text(f"SET LOCAL app.current_org_id = '{organization_id}';")
+            )
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+# 4. Lazy register all models into metadata
+def init_models():
+    import app.models.client
+    import app.models.source_file
+    import app.models.transaction
+    import app.models.invoice
+    import app.models.discrepancy
+    import app.models.audit
+    import app.models.cash
+import app.models.background_job
+
+init_models()

@@ -32,12 +32,15 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
+import uuid
+
 async def get_current_user(
     token: str = Depends(oauth2_scheme), 
     db: AsyncSession = Depends(get_db)
 ) -> UserModel:
     """
-    Dependency to decode Bearer token, extract user ID, and fetch user from DB.
+    DEFENSIVE DEPENDENCY: Decodes Bearer token, extracts identifier from 'sub',
+    and handles lookup safely whether 'sub' is a UUID string or an email.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -46,13 +49,20 @@ async def get_current_user(
     )
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
+        sub: str = payload.get("sub")
+        if sub is None:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
 
-    result = await db.execute(select(UserModel).where(UserModel.id == user_id))
+    # DEFENSIVE QUERY: Check if 'sub' is a valid UUID string or an email address
+    try:
+        parsed_uuid = uuid.UUID(sub)
+        result = await db.execute(select(UserModel).where(UserModel.id == parsed_uuid))
+    except ValueError:
+        # Fallback query if token sub happened to be stored as an email string
+        result = await db.execute(select(UserModel).where(UserModel.email == sub))
+
     user = result.scalars().first()
     if user is None or not user.is_active:
         raise credentials_exception

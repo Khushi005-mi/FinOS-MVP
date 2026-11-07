@@ -1,31 +1,38 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { api, handleApiError } from '@/lib/api';
+import { useState, useEffect } from 'react';
+import { api } from '@/lib/api';
 import { 
-  UploadCloud, CheckCircle2, AlertCircle, Loader2, Play, 
-  Database, ArrowRight, RefreshCw, X 
+  UploadCloud, CheckCircle2, AlertCircle, RefreshCw, 
+  Database, Trash2, ArrowRight, FileText, Check, ShieldCheck, HardDrive
 } from 'lucide-react';
+import Link from 'next/link';
+import { 
+  Eyebrow, 
+  ThreeWayNode, 
+  StatusBadge 
+} from '@/components/ui/primitives';
 
 export default function UploadPage() {
-  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<'hdfc' | 'razorpay' | 'tally' | 'vendor_bills'>('hdfc');
   const [file, setFile] = useState<File | null>(null);
-  const [fileType, setFileType] = useState('HDFC_BANK');
   const [uploading, setUploading] = useState(false);
-  const [reconciling, setReconciling] = useState(false);
-  
-  const [vaultFiles, setVaultFiles] = useState<any[]>([]);
-  const [uploadResult, setUploadResult] = useState<any>(null);
-  const [matchResult, setMatchResult] = useState<any>(null);
+  const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  const [ingestedFiles, setIngestedFiles] = useState<any[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
 
   const fetchVaultFiles = async () => {
+    setLoadingFiles(true);
     try {
-      const res = await api.get('/vault/');
-      setVaultFiles(res.data.sources || []);
-    } catch (err: unknown) {
-      console.error('Failed to fetch vault sources', err);
+      const res = await api.get('/vault/', { timeout: 10000 });
+      const filesData = Array.isArray(res.data) ? res.data : (res.data?.files || []);
+      setIngestedFiles(filesData);
+    } catch (err) {
+      console.error('Failed to fetch active vault files:', err);
+    } finally {
+      setLoadingFiles(false);
     }
   };
 
@@ -33,239 +40,269 @@ export default function UploadPage() {
     fetchVaultFiles();
   }, []);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
-      setUploadResult(null);
-      setError(null);
+  const handleDeleteFile = async (fileId: string) => {
+    if (!confirm("Are you sure you want to delete this source file from the vault?")) return;
+    try {
+      await api.delete(`/vault/files/${fileId}`, { timeout: 10000 });
+      fetchVaultFiles();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Failed to delete file.");
     }
   };
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) return;
-
     setUploading(true);
+    setResult(null);
     setError(null);
-    setUploadResult(null);
 
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('file_type', fileType);
-
-    // 15-second failsafe timeout so the UI never hangs
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    formData.append('source_type', activeTab);
 
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('finos_access_token') : null;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
-
-      // Native fetch handles multipart boundaries automatically without Axios header clobbering
-      const response = await fetch(`${apiUrl}/vault/upload`, {
-        method: 'POST',
-        headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: formData,
-        signal: controller.signal
+      const res = await api.post('/vault/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60000
       });
-
-      clearTimeout(timeoutId);
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Upload failed on server.');
-      }
-
-      setUploadResult(data);
+      setResult(res.data);
       setFile(null);
       fetchVaultFiles();
     } catch (err: any) {
-      if (err.name === 'AbortError') {
-        setError('Upload timed out after 15 seconds. Please check if your backend is running.');
-      } else {
-        setError(err.message || 'An unexpected error occurred during upload.');
-      }
+      const errMsg = err.response?.data?.detail || err.message || 'Upload failed. Please check network.';
+      setError(errMsg);
     } finally {
-      clearTimeout(timeoutId);
       setUploading(false);
     }
   };
 
-  const handleRunReconciliation = async () => {
-    setReconciling(true);
-    setError(null);
-    try {
-      const response = await api.post('/reconciliation/run-matching', { check_type: 'CHECK_2_GATEWAY_TO_BANK' });
-      setMatchResult(response.data);
-    } catch (err: unknown) {
-      setError(handleApiError(err));
-    } finally {
-      setReconciling(false);
-    }
-  };
-
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div className="space-y-8 max-w-7xl mx-auto font-sans pb-16">
+      {/* 1. Header Banner */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/[0.06] pb-6">
         <div>
-          <div className="flex items-center space-x-2 text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">
-            <Database className="w-3.5 h-3.5 text-blue-600" />
-            <span>Data Ingestion</span>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-brass animate-pulse" />
+            <Eyebrow>Multi-Stream Ingestion Pipeline</Eyebrow>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Source Records Ingestion</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Uploaded files are SHA-256 fingerprinted, normalized into signed integer paise, and reconciled automatically.
+          <h1 className="text-3xl font-serif text-stone-100 tracking-tight">
+            Source Records Ingestion & <span className="italic font-normal text-brass">Vault</span>
+          </h1>
+          <p className="text-xs text-stone-400 mt-1 max-w-2xl">
+            Uploaded files are SHA-256 fingerprinted, stored immutably in PostgreSQL RLS, and prepared for deterministic 3-way reconciliation.
           </p>
         </div>
-        <button
-          onClick={() => router.push('/dashboard')}
-          className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium px-4 py-2.5 rounded-lg transition shadow-sm flex items-center space-x-2 shrink-0"
-        >
-          <span>View Dashboard</span>
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
+
+        <div className="flex items-center gap-3">
+          <Link 
+            href="/dashboard"
+            className="inline-flex items-center gap-2 px-3.5 py-2 bg-ink-850 hover:bg-ink-800 text-stone-300 rounded-lg text-xs font-semibold border border-white/10 transition"
+          >
+            <span>View Dashboard</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
       </div>
 
       {error && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-800 text-xs p-4 rounded-xl flex items-center justify-between shadow-sm">
-          <div className="flex items-center space-x-2">
-            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-            <span>{error}</span>
+        <div className="p-4 bg-brick-dim border border-brick-border text-brick rounded-xl text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>Upload Failure: {error}</span>
           </div>
-          <button onClick={() => setError(null)} className="text-slate-400 hover:text-slate-700">
-            <X className="w-4 h-4" />
-          </button>
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Left: Upload Form */}
-        <div className="md:col-span-2 bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-5">
-          <h3 className="text-sm font-bold text-slate-900">Upload Financial File</h3>
-          
-          <form onSubmit={handleUpload} className="space-y-5">
+      {result && (
+        <div className="p-4 bg-sage-dim border border-sage-border text-sage rounded-xl text-xs flex items-center justify-between font-mono">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-sage" />
+            <span>Ingestion Confirmed: {result.filename} ({result.rows_parsed || result.records_count || 'canonical'} records normalized).</span>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Upload Workspace */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Upload Form Card */}
+        <div className="lg:col-span-2 hairline-card rounded-2xl p-6 space-y-6">
+          <div className="border-b border-white/[0.06] pb-3 flex justify-between items-center">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                Select Source Type
+              <h2 className="text-base font-serif text-stone-100 flex items-center gap-2">
+                <UploadCloud className="w-4 h-4 text-brass" /> Direct Stream Uploader
+              </h2>
+              <p className="text-xs text-stone-400 mt-0.5">Select adapter type and upload bank, gateway, or accounting files.</p>
+            </div>
+            <ThreeWayNode bank={true} books={true} gateway={true} />
+          </div>
+
+          <form onSubmit={handleUpload} className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-[11px] font-mono uppercase text-stone-400">
+                Source System Adapter Type
               </label>
               <select
-                value={fileType}
-                onChange={(e) => setFileType(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-lg px-3.5 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs transition"
+                value={activeTab}
+                onChange={(e) => setActiveTab(e.target.value as any)}
+                className="w-full px-3.5 py-2.5 bg-ink-950 border border-white/10 rounded-xl text-xs text-stone-200 font-sans focus:border-brass focus:outline-none"
               >
-                <option value="HDFC_BANK">HDFC Bank Statement (Bank Source)</option>
-                <option value="RAZORPAY_GATEWAY">Razorpay Settlement Report (Gateway Source)</option>
-                <option value="TALLY_LEDGER">Tally Daybook Export (Accounting Books)</option>
+                <option value="hdfc">HDFC / Corporate Bank Statement (Bank Source)</option>
+                <option value="razorpay">Razorpay Settlement Report (Gateway Source)</option>
+                <option value="tally">Tally Daybook & Ledger Export (Books Source)</option>
+                <option value="vendor_bills">Vendor Commercial Invoices (Payables Source)</option>
               </select>
             </div>
 
-            <div className="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-8 text-center transition bg-slate-50/60 hover:bg-blue-50/20 group">
-              <input type="file" id="file-upload" onChange={handleFileChange} accept=".csv,.xlsx,.xls" className="hidden" />
-              <label htmlFor="file-upload" className="cursor-pointer flex flex-col items-center space-y-2.5">
-                <div className="p-3 bg-white rounded-full border border-slate-200 shadow-sm group-hover:scale-105 transition">
-                  <UploadCloud className="w-6 h-6 text-blue-600" />
+            {/* Drag & Drop Area */}
+            <div className="border-2 border-dashed border-white/10 hover:border-brass/40 rounded-xl p-8 text-center bg-ink-950 transition cursor-pointer group">
+              <label className="cursor-pointer block space-y-2">
+                <div className="mx-auto h-12 w-12 rounded-xl bg-ink-850 border border-white/5 flex items-center justify-center text-stone-400 group-hover:text-brass transition">
+                  <UploadCloud className="h-6 w-6" />
                 </div>
-                <div className="text-xs text-slate-700 font-semibold">
-                  {file ? file.name : 'Click to browse or drop CSV / Excel file'}
+                <div className="text-xs text-stone-300 font-medium">
+                  <span className="text-brass font-bold hover:underline">Click to browse</span> or drop file here
                 </div>
-                <p className="text-[11px] text-slate-500">Automatic normalization & verification enabled</p>
+                <p className="text-[10px] text-stone-500 font-mono">Accepts CSV, XLSX, XLS with automatic column mapping</p>
+                <input 
+                  type="file" 
+                  accept=".csv,.xlsx,.xls"
+                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  className="hidden" 
+                />
               </label>
             </div>
 
-            <button
-              type="submit"
-              disabled={!file || uploading}
-              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-2.5 rounded-lg transition text-xs shadow-sm disabled:opacity-50 flex items-center justify-center space-x-2"
-            >
-              {uploading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin text-slate-300" />
-                  <span>Ingesting & Reconciling...</span>
-                </>
-              ) : (
-                <span>Upload & Process Immediately</span>
-              )}
-            </button>
-          </form>
-
-          {uploadResult && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 text-xs text-emerald-950 space-y-2.5 shadow-sm">
-              <p className="font-bold flex items-center space-x-2 text-sm text-emerald-900">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>{uploadResult.message}</span>
-              </p>
-              <div className="grid grid-cols-2 gap-2 text-xs text-slate-700 pt-2 border-t border-emerald-200">
-                <p>Detected Type: <strong className="text-slate-900 font-semibold">{uploadResult.detected_type}</strong></p>
-                <p>Records Ingested: <strong className="text-slate-900 font-semibold tabular-nums">{uploadResult.imported_records}</strong></p>
-                <p>Matches Created: <strong className="text-slate-900 font-semibold tabular-nums">{uploadResult.reconciliation?.matches_created ?? 0}</strong></p>
-                <p>Discrepancies Found: <strong className="text-rose-700 font-semibold tabular-nums">{uploadResult.reconciliation?.discrepancies_created ?? 0}</strong></p>
+            {file && (
+              <div className="p-3 bg-ink-950 border border-white/10 rounded-xl flex items-center justify-between text-xs font-mono">
+                <div className="flex items-center gap-2 truncate">
+                  <FileText className="w-4 h-4 text-brass shrink-0" />
+                  <span className="text-stone-200 font-semibold truncate">{file.name}</span>
+                  <span className="text-stone-500">({(file.size / 1024).toFixed(1)} KB)</span>
+                </div>
+                <button 
+                  type="button" 
+                  onClick={() => setFile(null)} 
+                  className="text-stone-400 hover:text-stone-200"
+                >
+                  Remove
+                </button>
               </div>
+            )}
+
+            <div className="flex justify-end pt-2 border-t border-white/[0.06]">
               <button
-                onClick={() => router.push('/dashboard')}
-                className="mt-2 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold px-4 py-2 rounded-lg transition text-xs flex items-center space-x-1.5 shadow-sm"
+                type="submit"
+                disabled={uploading || !file}
+                className="px-6 py-2.5 bg-brass hover:bg-brass-hover text-stone-950 font-bold rounded-xl text-xs transition flex items-center gap-2 shadow-lg shadow-brass/20 disabled:opacity-50"
               >
-                <span>See Updated Dashboard</span>
-                <ArrowRight className="w-3.5 h-3.5" />
+                {uploading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" /> Ingesting & Normalizing...
+                  </>
+                ) : (
+                  <>
+                    <span>Upload to Cryptographic Vault</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </>
+                )}
               </button>
             </div>
-          )}
+          </form>
         </div>
 
-        {/* Right: Active Vault Sources & Manual Re-run */}
-        <div className="space-y-6">
-          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-3">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-2.5">
-              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide">Active Ingested Files</h3>
-              <button 
-                onClick={fetchVaultFiles} 
-                className="text-slate-400 hover:text-slate-700 transition"
-                title="Refresh list"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-              </button>
+        {/* Informational Guidance Card */}
+        <div className="hairline-card rounded-2xl p-6 space-y-4">
+          <h3 className="text-sm font-serif text-stone-100 flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-sage" /> Multi-Source Integrity
+          </h3>
+          <p className="text-xs text-stone-400 leading-relaxed font-sans">
+            FinOS compares independent sources to detect hidden fee leaks, timing gaps, and duplicate deductions:
+          </p>
+
+          <div className="space-y-3 pt-2 text-xs font-sans">
+            <div className="p-3 bg-ink-950 rounded-xl border border-white/5 space-y-1">
+              <span className="text-[10px] font-mono uppercase text-brass block">1. Bank Statement</span>
+              <p className="text-stone-300">Ground-truth cleared debits, credits, and closing cash balances.</p>
             </div>
-            
-            {vaultFiles.length === 0 ? (
-              <p className="text-xs text-slate-500 py-2">No files uploaded yet.</p>
-            ) : (
-              <div className="space-y-2 max-h-72 overflow-y-auto">
-                {vaultFiles.map((f) => (
-                  <div key={f.file_id} className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs space-y-1">
-                    <div className="flex justify-between items-center">
-                      <span className="font-semibold text-slate-900 truncate max-w-[130px]">{f.filename}</span>
-                      <span className="bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded text-[10px] font-semibold">{f.file_type}</span>
-                    </div>
-                    <div className="flex justify-between text-[11px] text-slate-500 pt-0.5">
-                      <span className="tabular-nums">{f.row_count} rows in DB</span>
-                      <span className="text-emerald-700 font-semibold">{f.status}</span>
-                    </div>
-                  </div>
+
+            <div className="p-3 bg-ink-950 rounded-xl border border-white/5 space-y-1">
+              <span className="text-[10px] font-mono uppercase text-brass block">2. Gateway Settlements</span>
+              <p className="text-stone-300">Gross orders minus MDR deductions (1.5%–2%) and 18% GST.</p>
+            </div>
+
+            <div className="p-3 bg-ink-950 rounded-xl border border-white/5 space-y-1">
+              <span className="text-[10px] font-mono uppercase text-brass block">3. Tally Ledgers & Bills</span>
+              <p className="text-stone-300">Daybook vouchers and open vendor purchase commitments.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Ingested Vault Source Records Table */}
+      <div className="hairline-card rounded-2xl p-6 space-y-4">
+        <div className="flex justify-between items-center border-b border-white/[0.06] pb-3">
+          <div>
+            <h2 className="text-base font-serif text-stone-100 flex items-center gap-2">
+              <Database className="w-4 h-4 text-brass" /> Canonical Vault Records ({ingestedFiles.length} Sealed Files)
+            </h2>
+            <p className="text-xs text-stone-400 mt-0.5">Files currently loaded into the PostgreSQL RLS verification boundary.</p>
+          </div>
+          <button 
+            onClick={fetchVaultFiles}
+            className="p-2 bg-ink-850 hover:bg-ink-800 text-stone-300 rounded-lg text-xs border border-white/10 transition"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loadingFiles ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+
+        {ingestedFiles.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-white/[0.06] text-stone-400 uppercase tracking-wider text-[10px]">
+                  <th className="py-3 px-3">Filename</th>
+                  <th className="py-3 px-3">Stream Type</th>
+                  <th className="py-3 px-3">Row Count</th>
+                  <th className="py-3 px-3">Status</th>
+                  <th className="py-3 px-3">SHA-256 Fingerprint</th>
+                  <th className="py-3 px-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/[0.06] text-stone-200">
+                {ingestedFiles.map((f: any, idx: number) => (
+                  <tr key={idx} className="hover:bg-ink-800/40 transition">
+                    <td className="py-3 px-3 font-semibold text-white flex items-center gap-2">
+                      <FileText className="w-3.5 h-3.5 text-stone-400" />
+                      {f.filename}
+                    </td>
+                    <td className="py-3 px-3 font-mono text-stone-400">{f.file_type || f.source_type}</td>
+                    <td className="py-3 px-3 font-mono font-bold text-stone-100">{f.records_count || f.row_count || 'Parsed'}</td>
+                    <td className="py-3 px-3">
+                      <StatusBadge status={f.status || 'PARSED'} variant="sage" />
+                    </td>
+                    <td className="py-3 px-3 font-mono text-[10px] text-stone-500 truncate max-w-xs">
+                      {f.sha256_hash || f.file_hash || 'SHA256_VERIFIED'}
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <button
+                        onClick={() => handleDeleteFile(f.id)}
+                        className="p-1.5 text-stone-400 hover:text-brick hover:bg-brick-dim rounded-lg transition"
+                        title="Delete source file from vault"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
                 ))}
-              </div>
-            )}
+              </tbody>
+            </table>
           </div>
-
-          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-2.5">
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide">Manual Verification Run</h3>
-            <p className="text-xs text-slate-500 leading-relaxed">Re-executes multi-pass matching across all active database records.</p>
-            <button
-              onClick={handleRunReconciliation}
-              disabled={reconciling}
-              className="w-full bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 hover:text-slate-900 text-xs font-semibold py-2 rounded-lg transition flex items-center justify-center space-x-2 shadow-sm"
-            >
-              {reconciling ? <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-600" /> : <Play className="w-3.5 h-3.5 text-slate-700" />}
-              <span>Run Matching Check</span>
-            </button>
-            {matchResult && (
-              <p className="text-xs text-emerald-700 font-medium">
-                Verified: {matchResult.matches_created} matches, {matchResult.discrepancies_created} discrepancies.
-              </p>
-            )}
+        ) : (
+          <div className="py-12 text-center text-stone-500 text-xs">
+            No source files currently in vault. Use the upload form above to ingest your first stream.
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

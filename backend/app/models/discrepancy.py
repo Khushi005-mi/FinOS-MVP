@@ -58,3 +58,6 @@ class CaseModel(Base):
     created_at = Column(DateTime(timezone=True), server_default="now()", nullable=False)
 
     discrepancy = relationship("DiscrepancyModel", back_populates="case")
+
+# Added compatibility alias
+Discrepancy = MatchModel

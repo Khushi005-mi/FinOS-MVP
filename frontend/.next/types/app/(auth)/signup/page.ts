@@ -1,4 +1,4 @@
-// File: /Users/khushimishra/Desktop/finos-mvp/finos-mvp/frontend/app/(auth)/signup/page.tsx
+// File: /Users/khushimishra/Desktop/Final-mvp/FinOS-MVP/frontend/app/(auth)/signup/page.tsx
 import * as entry from '../../../../../app/(auth)/signup/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
