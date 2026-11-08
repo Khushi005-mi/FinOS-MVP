@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: finos-backend
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: "pip install -r backend/requirements.txt"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    rootDir: backend
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+
+  - type: web
+    name: finos-frontend
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: "npm install && npm run build"
+    startCommand: "npm start"
+    rootDir: frontend
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: finos-backend
+          property: url
+          transform: "https://{host}/api/v1"
