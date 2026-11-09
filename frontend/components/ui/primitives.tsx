@@ -13,8 +13,7 @@ export function Eyebrow({ children, className = '' }: { children: React.ReactNod
 
 /**
  * Institutional Indian Currency Formatter:
- * Optical balance: Rupee symbol is proportional, tabular numerals prevent column jumping,
- * and responsive text sizing prevents multi-card overflow.
+ * Accepts both raw numbers and formatted strings without defaulting to 0.
  */
 export function IndianCurrencyDisplay({
   amount,
@@ -37,7 +36,6 @@ export function IndianCurrencyDisplay({
     val = isNaN(parsed) ? 0 : parsed;
   }
 
-  // Format with standard Indian lakh/crore commas
   const formatted = val.toLocaleString('en-IN', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -107,7 +105,7 @@ export function ThreeWayNode({
 }
 
 /**
- * Semantic Status Badge: Combines muted color, subtle border, and text label.
+ * Semantic Status Badge
  */
 export function StatusBadge({
   status,
@@ -129,6 +127,31 @@ export function StatusBadge({
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold tracking-wider uppercase border ${styles} ${className}`}>
       {status}
+    </span>
+  );
+}
+
+/**
+ * Verified vs. Inferred Provenance Chip
+ */
+export function ProvenanceChip({
+  source,
+  isInferred = false,
+  className = '',
+}: {
+  source: string;
+  isInferred?: boolean;
+  className?: string;
+}) {
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono ${
+      isInferred
+        ? 'border border-dashed border-stone-700 bg-stone-900/50 text-stone-400'
+        : 'border border-stone-800 bg-stone-900 text-stone-300'
+    } ${className}`}>
+      <span className={`w-1 h-1 rounded-full ${isInferred ? 'bg-amber-400' : 'bg-stone-500'}`} />
+      <span className="truncate max-w-[140px]">{source}</span>
+      {isInferred && <span className="text-[9px] uppercase tracking-wider text-amber-400 font-sans ml-0.5">Inferred</span>}
     </span>
   );
 }
