@@ -48,15 +48,16 @@ export default function PaymentDecisionQueue() {
     try {
       const res = await api.get("/payables/decision-queue");
       const data = res.data;
-      setPayables(data.items || data.payables || []);
+      const items = data.items || data.payables || [];
+      setPayables(items);
       setAvailableCash(data.available_bank_cash_inr || data.verified_bank_cash || 0);
       setEmergencyReserve(data.emergency_reserve_floor_inr || data.emergency_reserve || 0);
       setSafeCapacity(data.safe_payment_capacity_inr || data.safe_payment_capacity || 0);
       setReserveMode(data.policy_mode || data.reserve_policy_mode || "NON_NEGOTIABLE");
 
-      if (data.recommended_payout_ids) {
-        setSelectedPayables(data.recommended_payout_ids);
-      }
+      // Auto-select all PAY NOW bills to capture ROI immediately
+      const payNowIds = items.filter((p: any) => (p.decision || '').toUpperCase() === 'PAY NOW').map((p: any) => p.invoice_id || p.id);
+      setSelectedPayables(payNowIds);
     } catch (err: unknown) {
       setError(handleApiError(err));
     } finally {

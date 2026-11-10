@@ -1,8 +1,8 @@
 {
-  "/(dashboard)/reports/page": "app/(dashboard)/reports/page.js",
-  "/(dashboard)/payables/page": "app/(dashboard)/payables/page.js",
   "/(dashboard)/upload/page": "app/(dashboard)/upload/page.js",
   "/(dashboard)/ask/page": "app/(dashboard)/ask/page.js",
+  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
+  "/(dashboard)/payables/page": "app/(dashboard)/payables/page.js",
   "/(dashboard)/queue/page": "app/(dashboard)/queue/page.js",
   "/(dashboard)/admin/page": "app/(dashboard)/admin/page.js"
 }
