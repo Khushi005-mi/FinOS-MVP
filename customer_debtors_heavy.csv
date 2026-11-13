@@ -1,0 +1,5 @@
+Customer Name,Invoice Number,Invoice Date,Due Date,Outstanding,Status
+Larsen and Toubro Ltd,REC-INV-9901,2026-09-15,2026-10-15,850000.00,OVERDUE
+Bharat Forge Ltd,REC-INV-9902,2026-10-01,2026-11-01,650000.00,PENDING
+Tata Motors Commercial,REC-INV-9903,2026-09-10,2026-10-10,420000.00,DISPUTED
+Reliance Retail Enterprise,REC-INV-9904,2026-10-10,2026-11-10,310000.00,PENDING

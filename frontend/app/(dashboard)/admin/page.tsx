@@ -466,8 +466,8 @@ export default function AdminGovernancePage() {
                 </select>
                 <span className="text-[10px] text-stone-500 font-sans block">
                   {policyMode === 'NON_NEGOTIABLE' 
-                    ? 'Recommended: Absolutely blocks all payment recommendations dipping below this line.' 
-                    : 'Permits disbursement below buffer only when accompanied by explicit sign-off.'}
+                    ? 'Hard Circuit Breaker — Strictly blocks any payout recommendation that breaches the reserve floor.' 
+                    : 'Flexible Governance — Permits emergency disbursements below buffer only with explicit CFO authorization.'}
                 </span>
               </div>
             </div>

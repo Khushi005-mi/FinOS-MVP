@@ -138,7 +138,7 @@ class MatchingEngine:
                 # Context-Aware Financial Reasoning
                 if days_elapsed >= 3:
                     classification = "AGED_LEAKAGE"
-                    root_cause = f"Settlement {sett.settlement_id} for ₹{net_amt:,.2f} was processed on {sett.settlement_date}. It is {days_elapsed} days past standard T+2 clearance with zero corresponding deposit in HDFC statement."
+                    root_cause = f"Settlement {sett.settlement_id} for ₹{net_amt:,.2f} was processed on {sett.settlement_date}. It is {days_elapsed} days past standard T+2 clearance with zero corresponding deposit in your corporate bank statement."
                     remediation = f"Raise an urgent support ticket with Razorpay Merchant Support quoting Settlement ID '{sett.settlement_id}' and demand the 16-digit bank UTR clearance proof."
                 elif refund_amt > 0:
                     classification = "REFUND_ADJUSTED"

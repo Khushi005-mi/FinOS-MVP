@@ -1,4 +1,4 @@
-// File: /Users/khushimishra/Desktop/Final-mvp/FinOS-MVP/frontend/app/(dashboard)/sources/page.tsx
+// File: /Users/khushimishra/Desktop/Final-MVP/FinOS-MVP/frontend/app/(dashboard)/sources/page.tsx
 import * as entry from '../../../../../app/(dashboard)/sources/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

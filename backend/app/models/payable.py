@@ -20,4 +20,13 @@ class Payable(Base):
     duplicate_risk_flag = Column(Boolean, server_default="false", nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
+# Universal compatibility aliases
 PayableModel = Payable
+VendorBillPayable = Payable
+
+# Cross-module import bridge
+try:
+    from app.models.vendor import Vendor
+    VendorMaster = Vendor
+except ImportError:
+    VendorMaster = None

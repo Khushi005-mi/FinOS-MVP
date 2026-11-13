@@ -1,0 +1,8 @@
+Vendor Name,Invoice Number,Invoice Date,Due Date,Amount,Discount %,Criticality
+Apex Heavy Foundry,INV-2026-8891,2026-10-25,2026-11-14,400000.00,2.0%,HIGH
+Precision Valve Corp,INV-2026-0912,2026-10-20,2026-11-25,250000.00,0.0%,STANDARD
+Corporate Factory Lease,LEASE-NOV-2026,2026-10-01,2026-11-02,300000.00,0.0%,HIGH
+Grid Power & Utility Bills,UTIL-2026-883,2026-10-15,2026-11-05,50000.00,0.0%,HIGH
+Mahindra Industrial Logistics,LOG-2026-442,2026-10-22,2026-11-18,120000.00,1.5%,STANDARD
+AWS Cloud Infrastructure,INV-AWS-7712,2026-10-05,2026-11-04,150000.00,0.0%,HIGH
+Apex Heavy Foundry,INV-2026-8891,2026-10-25,2026-11-14,400000.00,2.0%,HIGH

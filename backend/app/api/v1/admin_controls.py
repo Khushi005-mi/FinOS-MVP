@@ -74,14 +74,20 @@ async def get_admin_governance_overview(
         policy_mode = getattr(policy, "buffer_policy_type", "NON_NEGOTIABLE") or "NON_NEGOTIABLE"
         approval_threshold_inr = (float(policy.approval_threshold_paise) / 100.0) if (policy and policy.approval_threshold_paise) else 50000.0
 
-        # Fetch Dynamic Bank Cash Source
-        source_res = await db.execute(
-            select(SourceFileModel.filename)
-            .where(SourceFileModel.organization_id == org_id)
-            .order_by(desc(SourceFileModel.created_at))
-            .limit(1)
-        )
-        detected_source = source_res.scalar_one_or_none() or "Primary Bank Statement"
+        # Fetch True Active Bank Statement Source (is_historical = FALSE)
+        source_res = await db.execute(text("""
+            SELECT COALESCE(sf.filename, 'icici_bank_statement.csv')
+            FROM bank_transactions bt
+            JOIN source_files sf ON bt.source_file_id = sf.id
+            WHERE bt.organization_id = :oid 
+              AND bt.balance_paise IS NOT NULL 
+              AND bt.balance_paise > 0
+              AND sf.is_historical = FALSE
+            ORDER BY bt.date DESC, bt.created_at DESC
+            LIMIT 1;
+        """), {"oid": org_id})
+        source_row = source_res.first()
+        detected_source = source_row[0] if (source_row and source_row[0]) else "icici_bank_statement.csv"
 
         # Fetch Live Available Cash
         cash_res = await db.execute(text("""
@@ -275,8 +281,21 @@ async def get_admin_governance_overview(
             for c in conn_res.scalars().all()
         ]
 
+        # Fetch true source file for latest bank closing
+        bank_source_res = await db.execute(text("""
+            SELECT sf.filename 
+            FROM bank_transactions bt
+            JOIN source_files sf ON bt.source_file_id = sf.id
+            WHERE bt.organization_id = :oid AND bt.balance_paise IS NOT NULL AND bt.balance_paise > 0
+            ORDER BY bt.date DESC, bt.created_at DESC
+            LIMIT 1;
+        """), {"oid": org_id})
+        bank_source_row = bank_source_res.first()
+        true_bank_source = bank_source_row[0] if bank_source_row else "icici_bank_statement.csv"
+
         return {
             "cash_policy": {
+                "source_file_name": true_bank_source,
                 "emergency_reserve_floor_inr": reserve_inr,
                 "emergency_reserve_display": f"₹{reserve_inr:,.2f}",
                 "reserve_policy_mode": policy_mode,

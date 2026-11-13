@@ -12,9 +12,10 @@ class Vendor(Base):
     name = Column(String(255), nullable=False)
     pan = Column(String(10), nullable=True)
     gstin = Column(String(15), nullable=True)
-    criticality_score = Column(String(50), server_default="STANDARD", nullable=False) # HIGH, STANDARD, LOW
-    reliability_score = Column(Numeric(5, 2), server_default="85.00", nullable=False) # 0 to 100
+    criticality_score = Column(String(50), server_default="STANDARD", nullable=False)
+    reliability_score = Column(Numeric(5, 2), server_default="85.00", nullable=False)
     total_spend_paise = Column(Numeric(20, 0), server_default="0", nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
 VendorModel = Vendor
+VendorMaster = Vendor
