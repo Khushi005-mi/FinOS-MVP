@@ -232,18 +232,26 @@ class KPICalculationService:
                 due_this_week_count += 1
                 due_this_week_paise += amt_paise
 
-            # Decision Logic Simulation
+            # Strict Institutional Solvency Triage
             days_until_due = (due_d - today).days
-            if status_str in ["ON_HOLD", "DISPUTED"] or (safe_capacity_inr - amt_inr < 0 and days_until_due > 0):
+            is_disputed = status_str in ["ON_HOLD", "DISPUTED"]
+            
+            # Circuit Breaker: Cannot Pay Now if it breaches remaining safe capacity
+            if is_disputed:
                 hold_count += 1
                 hold_paise += amt_paise
-            elif (disc_val > 0 and days_until_due <= 3 and safe_capacity_inr >= amt_inr) or (days_until_due <= 1 and safe_capacity_inr >= amt_inr) or crit == "HIGH":
+            elif amt_inr <= safe_capacity_inr and (days_until_due <= 1 or (disc_val > 0 and days_until_due <= 3) or crit == "HIGH"):
                 pay_now_count += 1
                 pay_now_paise += amt_paise
+                safe_capacity_inr -= amt_inr  # Deduct sequentially to prevent cumulative over-allocation!
                 discounts_captured_inr += disc_val
-            else:
+            elif days_until_due > 5:
                 schedule_count += 1
                 schedule_paise += amt_paise
+            else:
+                # Urgent or critical bill that CANNOT be paid because cash buffer is exhausted
+                hold_count += 1
+                hold_paise += amt_paise
 
         # Duplicate Risk Check
         dup_res = await db.execute(text("""

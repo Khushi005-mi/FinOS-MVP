@@ -495,7 +495,7 @@ export default function DashboardPage() {
             </div>
             <h3 className="text-xl font-bold text-white tracking-tight">Active Payment Decision Queue</h3>
             <p className="text-xs text-slate-300 font-mono leading-relaxed">
-              Deterministic priority ranking: {payables?.queue_summary?.pay_now?.count || 0} bills safe to Pay Now, {payables?.queue_summary?.schedule?.count || 0} scheduled for deferred maturity.
+              Deterministic triage: {payables?.queue_summary?.pay_now?.count || 0} Pay Now, {payables?.queue_summary?.schedule?.count || 0} Scheduled, {payables?.queue_summary?.hold?.count || 0} on Hold.
             </p>
 
             <div className="grid grid-cols-3 gap-3 pt-2 font-mono text-xs">
